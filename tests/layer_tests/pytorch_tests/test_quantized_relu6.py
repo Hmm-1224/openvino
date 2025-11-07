@@ -3,7 +3,7 @@ import pytest
 import torch
 import platform
 from pytorch_layer_test_class import PytorchLayerTest
-
+from openvino.runtime import Core, Extension
 
 class quantized_relu6(torch.nn.Module):
     def __init__(self, scale, zero_point, dtype) -> None:
@@ -17,7 +17,6 @@ class quantized_relu6(torch.nn.Module):
         q_relu6 = torch.ops.quantized.relu6(quantized_tensor, self.scale, self.zero_point)
         dequantized_tensor = torch.dequantize(q_relu6)
         return dequantized_tensor
-
 
 def quantized_relu6_converter(decoder):
     input_tensor = decoder.get_input(0)
@@ -42,25 +41,19 @@ def quantized_relu6_converter(decoder):
     quantized_output = opset.quantize_linear(clamped, output_scale, output_zero_point)
     return quantized_output
 
-
 def register_quantized_relu6():
     try:
-        from openvino.frontend.pytorch.decoder import TorchScriptPythonDecoder
-        TorchScriptPythonDecoder.add_converter("quantized::relu6", quantized_relu6_converter)
-    except ImportError:
-        try:
-            import openvino.frontend.pytorch.ts_decoder as ts_decoder
-            ts_decoder.get_pytorch_decoder().add_converter("quantized::relu6", quantized_relu6_converter)
-        except (ImportError, AttributeError):
-            pass
-
+        core = Core()
+        ext = Extension(quantized_relu6_converter)
+        core.add_extension(ext)
+        print("[INFO] quantized::relu6 extension registered successfully.")
+    except Exception as e:
+        print(f"[WARN] Could not register quantized::relu6 extension: {e}")
 
 def init_quantized_relu6_support():
     register_quantized_relu6()
 
-
 init_quantized_relu6_support()
-
 
 class TestQuantizedReLU6(PytorchLayerTest):
     rng = np.random.default_rng(seed=123)
